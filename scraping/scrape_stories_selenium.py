@@ -44,7 +44,84 @@ def scrape_story_content(story_url):
             content_div = soup.find('div', id='content')
         
         if content_div:
-            story_text = content_div.get_text(separator='\n', strip=True)
+            # Remove unwanted elements (scripts, styles, ads, navigation, etc.)
+            for element in content_div.find_all(['script', 'style', 'noscript', 'iframe', 
+                                                   'nav', 'header', 'footer', 'aside']):
+                element.decompose()
+            
+            # Remove elements with common ad/navigation classes
+            for class_pattern in ['ad', 'advertisement', 'nav', 'menu', 'sidebar', 
+                                   'social', 'share', 'comment', 'related']:
+                for element in content_div.find_all(class_=lambda x: x and class_pattern in x.lower()):
+                    element.decompose()
+            
+            # Strategy: Extract visible text while preserving paragraph structure
+            paragraphs = []
+            
+            # Method 1: Try to find paragraph tags first
+            p_tags = content_div.find_all('p')
+            if p_tags:
+                for p in p_tags:
+                    text = p.get_text(separator=' ', strip=True)
+                    # Clean up extra whitespace
+                    text = re.sub(r'\s+', ' ', text).strip()
+                    if text and len(text) > 15:  # Skip very short paragraphs
+                        paragraphs.append(text)
+            
+            # Method 2: If no <p> tags, look for <br> tag separated content
+            if not paragraphs:
+                # Replace <br> tags with a special marker
+                for br in content_div.find_all('br'):
+                    br.replace_with('\n||PARA_BREAK||\n')
+                
+                # Get text and split by marker
+                full_text = content_div.get_text(separator=' ')
+                potential_paragraphs = full_text.split('||PARA_BREAK||')
+                
+                for para in potential_paragraphs:
+                    para = para.strip()
+                    if para and len(para) > 15:
+                        # Clean up whitespace
+                        para = re.sub(r'\s+', ' ', para).strip()
+                        paragraphs.append(para)
+            
+            # Method 3: If still no paragraphs, look for div blocks
+            if not paragraphs:
+                div_blocks = content_div.find_all('div', recursive=True)
+                for div in div_blocks:
+                    # Only get direct text, not from nested divs
+                    text = ''.join([str(content) for content in div.contents 
+                                   if isinstance(content, str)])
+                    text = re.sub(r'\s+', ' ', text).strip()
+                    if text and len(text) > 15:
+                        paragraphs.append(text)
+            
+            # Method 4: Last resort - split by double newlines
+            if not paragraphs:
+                full_text = content_div.get_text(separator=' ')
+                potential_paragraphs = [p.strip() for p in re.split(r'\n\s*\n', full_text)]
+                
+                for para in potential_paragraphs:
+                    if para and len(para) > 15:
+                        para = re.sub(r'\s+', ' ', para).strip()
+                        paragraphs.append(para)
+            
+            # Remove duplicate consecutive paragraphs
+            unique_paragraphs = []
+            prev_para = None
+            for para in paragraphs:
+                if para != prev_para:
+                    unique_paragraphs.append(para)
+                    prev_para = para
+            
+            # Join paragraphs with exactly one blank line between them
+            if unique_paragraphs:
+                story_text = '\n\n'.join(unique_paragraphs)
+            else:
+                # Absolute last resort: get all text as single block
+                story_text = content_div.get_text(separator=' ', strip=True)
+                story_text = re.sub(r'\s+', ' ', story_text).strip()
+            
             return {'title': title, 'author': author, 'content': story_text}
         return None
     except Exception as e:
