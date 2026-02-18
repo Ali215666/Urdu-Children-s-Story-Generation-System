@@ -93,8 +93,7 @@ jobs:
     
     - name: Build Docker image
       run: |
-        cd backend
-        docker build -t urdu-story-generator:${{ github.sha }} .
+        docker build -f backend/Dockerfile -t urdu-story-generator:${{ github.sha }} .
     
     - name: Test Docker image
       run: |
