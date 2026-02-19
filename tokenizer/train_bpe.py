@@ -1,14 +1,21 @@
 """
 Train BPE tokenizer on Urdu corpus and save results
 """
+import sys
+import os
+
+# Add parent directory to path for constants import
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 from bpe_tokenizer import (
     load_corpus, initialize_vocabulary, train_bpe, 
     count_unique_symbols, save_tokenizer, load_tokenizer
 )
+from utils.constants import EOS, EOP, EOT, SPECIAL_TOKENS
 import json
 
 # Configuration
-CORPUS_PATH = "../Data/Preprocessed/corpus.txt"
+CORPUS_PATH = "../data/processed/corpus.txt"
 TARGET_VOCAB_SIZE = 250
 OUTPUT_DIR = "."
 
