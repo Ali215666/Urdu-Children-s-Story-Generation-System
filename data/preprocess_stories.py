@@ -1,6 +1,11 @@
 import os
 import re
+import sys
 from pathlib import Path
+
+# Add parent directory to path for constants import
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from utils.constants import EOS, EOP, EOT
 
 def normalize_urdu_text(text):
     """Normalize Unicode and standardize Urdu characters"""
@@ -104,7 +109,11 @@ def extract_story_content(file_path):
         return None
 
 def insert_special_tokens(text):
-    """Insert <EOS>, <EOP>, and <EOT> tokens"""
+    """Insert EOS, EOP, and EOT tokens using unused Unicode Private Use Area characters.
+    
+    Using single Unicode codepoints (U+E000, U+E001, U+E002) instead of ASCII strings
+    like <EOS> so that the BPE tokenizer treats each token as a single atomic unit.
+    """
     # Split text into paragraphs (separated by empty lines)
     paragraphs = text.split('\n\n')
     
@@ -118,25 +127,24 @@ def insert_special_tokens(text):
         # Split paragraph into sentences based on Urdu punctuation
         # Sentence enders: ۔ ؟ !
         
-        # Add <EOS> after each sentence-ending punctuation
-        # We need to be careful to handle the punctuation properly
+        # Add EOS after each sentence-ending punctuation
         processed_para = paragraph
         
-        # Replace each sentence-ending punctuation with itself + <EOS> + newline
-        processed_para = re.sub(r'([۔؟!])\s*', r'\1<EOS>\n', processed_para)
+        # Replace each sentence-ending punctuation with itself + EOS + newline
+        processed_para = re.sub(r'([۔؟!])\s*', r'\1' + EOS + '\n', processed_para)
         
-        # Remove trailing newline and add <EOP>
+        # Remove trailing newline and add EOP
         processed_para = processed_para.strip()
         if processed_para:
-            processed_para += '\n<EOP>'
+            processed_para += '\n' + EOP
             processed_paragraphs.append(processed_para)
     
     # Join all paragraphs
     result = '\n'.join(processed_paragraphs)
     
-    # Add <EOT> at the very end
+    # Add EOT at the very end
     if result:
-        result += '\n<EOT>'
+        result += '\n' + EOT
     
     return result
 
