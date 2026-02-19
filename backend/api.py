@@ -2,14 +2,19 @@
 FastAPI service for Urdu story generation using BPE tokenizer and trigram model
 """
 import sys
-sys.path.append('../tokenizer')
-sys.path.append('../model')
+import os
+
+# Add parent and sibling directories to path
+sys.path.append(os.path.join(os.path.dirname(os.path.dirname(__file__)), 'tokenizer'))
+sys.path.append(os.path.join(os.path.dirname(os.path.dirname(__file__)), 'model'))
+sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from bpe_tokenizer import load_tokenizer, encode
 from trigram_model import load_model, generate_story
+from utils.constants import EOS, EOP, EOT, SPECIAL_TOKENS
 
 # Initialize FastAPI app
 app = FastAPI(title="Urdu Story Generator API")
@@ -25,15 +30,18 @@ app.add_middleware(
 
 # Load models at startup
 print("Loading models...")
-vocab, merges = load_tokenizer('../tokenizer')
-unigrams, bigrams, trigrams = load_model('../model/trigram_model.pkl')
+tokenizer_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'tokenizer')
+model_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'model', 'trigram_model.pkl')
+
+vocab, merges = load_tokenizer(tokenizer_dir)
+unigrams, bigrams, trigrams = load_model(model_path)
 print("✓ Models loaded successfully")
 
 
 # Request/Response models
 class GenerateRequest(BaseModel):
     prefix: str = Field(..., description="Starting text for story generation")
-    max_length: int = Field(50, ge=1, le=200, description="Maximum number of tokens to generate")
+    max_length: int = Field(500, ge=10, le=2000, description="Maximum number of tokens to generate")
 
 
 class GenerateResponse(BaseModel):
@@ -50,12 +58,13 @@ def generate_story_endpoint(request: GenerateRequest):
         max_length: Maximum number of tokens to generate
         
     Returns:
-        Generated story as string
+        Generated story as string (special tokens are filtered by decode())
     """
     # Encode prefix with BPE tokenizer
     prefix_tokens = encode(request.prefix, merges)
     
     # Generate story tokens with trigram model
+    # decode() function already filters out special tokens
     story_text = generate_story(
         prefix_tokens=prefix_tokens,
         max_len=request.max_length,
@@ -64,33 +73,11 @@ def generate_story_endpoint(request: GenerateRequest):
         trigram_counts=trigrams
     )
     
-    print(f"DEBUG - Raw story before cleaning: {repr(story_text)}")
-    
-    # Ensure story_text is a string
+    # Ensure story_text is a string and clean
     if story_text is None:
         story_text = ""
     else:
-        story_text = str(story_text)
-    
-    # Clean up the story text - remove all special tokens and undefined
-    special_tokens = [
-        '<EOT>', '<EOS>', '<EOP>', '<PAD>', 
-        'undefined', 'None', 'null', 'NaN',
-        '<UNK>', '<START>', '<END>'
-    ]
-    
-    for token in special_tokens:
-        story_text = story_text.replace(token, '')
-    
-    # Remove any remaining angle bracket tokens
-    import re
-    story_text = re.sub(r'<[^>]+>', '', story_text)
-    
-    # Clean up extra spaces and strip
-    story_text = ' '.join(story_text.split())
-    story_text = story_text.strip()
-    
-    print(f"DEBUG - Cleaned story: {repr(story_text)}")
+        story_text = str(story_text).strip()
     
     return GenerateResponse(story=story_text)
 
@@ -123,4 +110,4 @@ if __name__ == "__main__":
     print('       -d \'{"prefix": "ایک دن", "max_length": 30}\'')
     print("\n" + "="*70 + "\n")
     
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run(app, host="localhost", port=8000)
