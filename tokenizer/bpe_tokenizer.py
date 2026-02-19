@@ -5,8 +5,13 @@ Character-level initialization with </w> end-of-word markers
 
 import json
 import os
+import sys
 from collections import defaultdict
 from typing import Dict, List, Tuple
+
+# Add parent directory to path for constants import
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from utils.constants import EOS, EOP, EOT, SPECIAL_TOKENS, EOW
 
 
 def load_corpus(filepath: str) -> List[str]:
@@ -47,12 +52,12 @@ def initialize_vocabulary(words: List[str]) -> Dict[Tuple[str, ...], int]:
         if not word:
             continue
             
-        # Keep special tokens as-is (atomic tokens)
-        if word in ['<EOS>', '<EOP>', '<EOT>']:
+        # Keep special tokens as-is (atomic tokens) - never split
+        if word in SPECIAL_TOKENS:
             word_tuple = (word,)
         else:
             # Convert word to tuple of characters + end marker
-            word_tuple = tuple(list(word) + ['</w>'])
+            word_tuple = tuple(list(word) + [EOW])
         
         vocab[word_tuple] += 1
     
@@ -62,6 +67,7 @@ def initialize_vocabulary(words: List[str]) -> Dict[Tuple[str, ...], int]:
 def get_pair_frequencies(vocab: Dict[Tuple[str, ...], int]) -> Dict[Tuple[str, str], int]:
     """
     Count frequencies of adjacent symbol pairs in vocabulary.
+    NEVER merges pairs that include special tokens.
     
     Args:
         vocab: Dictionary mapping word tuples to their frequencies
@@ -79,7 +85,13 @@ def get_pair_frequencies(vocab: Dict[Tuple[str, ...], int]) -> Dict[Tuple[str, s
         
         # Count all adjacent pairs in this word
         for i in range(len(word_tuple) - 1):
-            pair = (word_tuple[i], word_tuple[i + 1])
+            sym1, sym2 = word_tuple[i], word_tuple[i + 1]
+            
+            # NEVER merge pairs containing special tokens
+            if sym1 in SPECIAL_TOKENS or sym2 in SPECIAL_TOKENS:
+                continue
+            
+            pair = (sym1, sym2)
             pairs[pair] += freq
     
     return dict(pairs)
@@ -281,6 +293,7 @@ def load_tokenizer(output_dir: str) -> Tuple[Dict[Tuple[str, ...], int], List[Tu
 def encode(text: str, merges: List[Tuple[str, str]]) -> List[str]:
     """
     Encode text into BPE tokens using learned merges.
+    Special tokens are preserved exactly and never split.
     
     Args:
         text: Input text to tokenize
@@ -294,19 +307,19 @@ def encode(text: str, merges: List[Tuple[str, str]]) -> List[str]:
         >>> encode("بہت اچھا", merges)
         ['بہ', 'ت</w>', 'ا', 'چ', 'ھ', 'ا</w>']
     """
-    # Split text into words
+    # Split text into words (special tokens are single characters, so they're preserved)
     words = text.split()
     
     all_tokens = []
     
     for word in words:
-        # Handle special tokens as atomic units
-        if word in ['<EOS>', '<EOP>', '<EOT>']:
+        # Handle special tokens as atomic units - NEVER split them
+        if word in SPECIAL_TOKENS:
             all_tokens.append(word)
             continue
         
         # Initialize with character-level tokens + end marker
-        tokens = list(word) + ['</w>']
+        tokens = list(word) + [EOW]
         
         # Apply each merge operation in sequence
         for merge_pair in merges:
@@ -349,46 +362,91 @@ def _apply_merge_to_tokens(tokens: List[str], pair: Tuple[str, str]) -> List[str
 def decode(tokens: List[str]) -> str:
     """
     Decode BPE tokens back into readable text.
+    Converts special tokens to proper formatting (paragraphs, sentences).
     
     Args:
         tokens: List of BPE tokens (from encode function)
         
     Returns:
-        Reconstructed text string
+        Reconstructed text string with proper formatting
         
     Example:
-        >>> tokens = ['بہت</w>', 'ا', 'چھ', 'ا</w>']
+        >>> tokens = ['بہت</w>', 'ا', 'چھ', 'ا</w>', EOS]
         >>> decode(tokens)
-        'بہت اچھا'
+        'بہت اچھا۔'
     """
     # Handle None or empty input
     if not tokens:
         return ""
     
-    # Define all special tokens to filter out
-    special_tokens = {
-        '<EOT>', '<EOS>', '<EOP>', '<PAD>', '<UNK>', '<START>', '<END>',
-        'None', 'undefined', 'null', 'NaN', ''
-    }
+    # Process tokens and handle special tokens
+    result_parts = []
+    current_text = []
     
-    # Filter out special tokens and invalid values
-    valid_tokens = []
     for t in tokens:
-        # Skip None, empty, or special tokens
-        if t is None:
+        # Skip None or empty
+        if t is None or not t:
             continue
+        
         token_str = str(t)
-        if token_str and token_str not in special_tokens and not token_str.startswith('<'):
-            valid_tokens.append(token_str)
+        
+        # Skip invalid tokens
+        if token_str in {'None', 'undefined', 'null', 'NaN', ''}:
+            continue
+        
+        # Handle special tokens with formatting
+        if token_str == EOT:
+            # End of story - flush current text and stop
+            if current_text:
+                text = ''.join(current_text).replace(EOW, ' ')
+                text = ' '.join(text.split()).strip()
+                if text:
+                    # Ensure paragraph ends with punctuation
+                    if not text.endswith(('۔', '؟', '!')):
+                        text += '۔'
+                    result_parts.append(text)
+            break
+            
+        elif token_str == EOP:
+            # End of paragraph - add double newline
+            if current_text:
+                text = ''.join(current_text).replace(EOW, ' ')
+                text = ' '.join(text.split()).strip()
+                if text:
+                    # Ensure paragraph ends with punctuation
+                    if not text.endswith(('۔', '؟', '!')):
+                        text += '۔'
+                    result_parts.append(text)
+                    result_parts.append('\n\n')  # Paragraph break
+                current_text = []
+            
+        elif token_str == EOS:
+            # End of sentence - continue (sentence ending already in text)
+            # Just ensure there's proper spacing
+            continue
+            
+        else:
+            # Regular token
+            current_text.append(token_str)
     
-    # Join all tokens into single string
-    text = ''.join(valid_tokens)
+    # Flush any remaining text
+    if current_text:
+        text = ''.join(current_text).replace(EOW, ' ')
+        text = ' '.join(text.split()).strip()
+        if text:
+            # Ensure final text ends with punctuation
+            if not text.endswith(('۔', '؟', '!')):
+                text += '۔'
+            result_parts.append(text)
     
-    # Replace end-of-word markers with spaces
-    text = text.replace('</w>', ' ')
+    # Join all parts
+    final_text = ''.join(result_parts)
     
-    # Clean up extra spaces and return
-    return ' '.join(text.split()).strip()
+    # Clean up excessive newlines (max 2 consecutive)
+    import re
+    final_text = re.sub(r'\n{3,}', '\n\n', final_text)
+    
+    return final_text.strip()
 
 
 def print_vocab_stats(vocab: Dict[Tuple[str, ...], int]) -> None:
