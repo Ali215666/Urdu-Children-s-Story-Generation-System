@@ -1,0 +1,104 @@
+# ====================================
+# Vercel Deployment .gitignore
+# ====================================
+
+# Vercel
+.vercel
+
+# ====================================
+# Next.js / Frontend
+# ====================================
+.next/
+out/
+node_modules/
+.env*.local
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# ====================================
+# Python / Backend
+# ====================================
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+
+# Virtual environments (local dev only)
+venv/
+env/
+ENV/
+.venv
+
+# ====================================
+# Data & Model Files
+# ====================================
+# Keep model files (needed for deployment)
+# model/*.pkl
+# tokenizer/*.json
+# tokenizer/*.txt
+
+# Exclude raw data (large files)
+raw/
+data/raw/
+
+# Exclude .next build cache
+.next/cache/
+
+# ====================================
+# Old Structure (Deprecated)
+# ====================================
+# Keep for reference, but excluded from deployment via .vercelignore
+# frontend/  (moved to root)
+# backend/   (replaced by api/)
+
+# ====================================
+# Development
+# ====================================
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*.sublime-*
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# ====================================
+# Testing
+# ====================================
+coverage/
+.nyc_output/
+
+# ====================================
+# Misc
+# ====================================
+.env
+.env.test
+.cache
+*.tgz
+.npm
+.eslintcache
+.node_repl_history
+.yarn-integrity
+
+# Docker (not needed for Vercel)
+Dockerfile
+docker-compose.yml
+.dockerignore

@@ -1,0 +1,59 @@
+# Vercel build outputs
+.vercel
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+
+# Virtual environments (for local development)
+venv/
+env/
+ENV/
+.venv
+
+# Next.js
+.next/
+out/
+node_modules/
+.env*.local
+
+# Old structure (frontend folder - no longer needed)
+frontend/
+
+# Backend folder (replaced by api/ serverless functions)
+backend/
+
+# Data files (raw stories are large, keep only necessary files)
+raw/
+data/raw/
+data/scrape_stories_selenium.py
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker (not needed for Vercel)
+Dockerfile
+docker-compose.yml
+.dockerignore
+
+# Git
+.git/
+
+# Keep these files (comment out to include):
+# model/          # NEEDED for serverless function
+# tokenizer/      # NEEDED for serverless function
+# utils/          # NEEDED for serverless function
+# data/processed/ # NEEDED for model training data

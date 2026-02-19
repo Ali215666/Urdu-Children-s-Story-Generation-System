@@ -13,7 +13,9 @@ export default function Home() {
     setError('')
 
     try {
-      const response = await fetch('http://localhost:8000/generate', {
+      // Call Vercel serverless function at /api/generate
+      // This works both in development (localhost:3000) and production (vercel.app)
+      const response = await fetch('/api/generate', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -25,16 +27,18 @@ export default function Home() {
       })
 
       if (!response.ok) {
-        throw new Error(`Backend error: ${response.status}`)
+        const errorData = await response.json().catch(() => ({}))
+        throw new Error(errorData.error || `Backend error: ${response.status}`)
       }
 
       const data = await response.json()
       
       if (data.story) {
-        // Backend decode() already handles special tokens and formatting
+        // Backend already handles special tokens and formatting
         const cleanedStory = data.story.trim()
         
         console.log('Story from backend:', cleanedStory)
+        console.log('Tokens generated:', data.tokens_generated)
         
         setStory(cleanedStory)
       } else {
@@ -42,7 +46,7 @@ export default function Home() {
       }
     } catch (error) {
       console.error('Error:', error)
-      setError('Connection error. Make sure backend is running on port 8000.')
+      setError(error.message || 'Failed to generate story. Please try again.')
     } finally {
       setLoading(false)
     }
