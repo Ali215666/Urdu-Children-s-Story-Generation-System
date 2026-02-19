@@ -12,7 +12,6 @@ This function:
 import json
 import sys
 import os
-from http.server import BaseHTTPRequestHandler
 
 # Add parent directories to path for imports
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -60,104 +59,109 @@ def load_models():
     return _vocab, _merges, _unigrams, _bigrams, _trigrams
 
 
-class handler(BaseHTTPRequestHandler):
+def handler(event, context):
     """
     Vercel serverless function handler.
-    Vercel expects a class named 'handler' that extends BaseHTTPRequestHandler.
-    """
     
-    def do_POST(self):
-        """Handle POST requests to /api/generate"""
-        try:
-            # Read request body
-            content_length = int(self.headers.get('Content-Length', 0))
-            body = self.rfile.read(content_length).decode('utf-8')
-            
-            # Parse JSON
+    Args:
+        event: Request object containing HTTP method, body, headers
+        context: Runtime context (unused)
+    
+    Returns:
+        Response object with statusCode, body, headers
+    """
+    try:
+        # Handle CORS preflight
+        if event.get('httpMethod') == 'OPTIONS' or event.get('method') == 'OPTIONS':
+            return {
+                'statusCode': 200,
+                'headers': {
+                    'Access-Control-Allow-Origin': '*',
+                    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+                    'Access-Control-Allow-Headers': 'Content-Type',
+                    'Content-Type': 'application/json'
+                },
+                'body': ''
+            }
+        
+        # Get request body
+        body = event.get('body', '')
+        if isinstance(body, str):
             try:
                 data = json.loads(body)
             except json.JSONDecodeError:
-                self.send_error_response(400, "Invalid JSON in request body")
-                return
-            
-            # Validate input
-            prefix = data.get('prefix', '').strip()
-            if not prefix:
-                self.send_error_response(400, "Missing or empty 'prefix' field")
-                return
-            
-            max_length = data.get('max_length', 500)
-            try:
-                max_length = int(max_length)
-                if max_length < 10 or max_length > 2000:
-                    raise ValueError()
-            except ValueError:
-                self.send_error_response(400, "max_length must be an integer between 10 and 2000")
-                return
-            
-            # Load models (cached after first request)
-            vocab, merges, unigrams, bigrams, trigrams = load_models()
-            
-            # Encode prefix with BPE tokenizer
-            prefix_tokens = encode(prefix, merges)
-            print(f"📝 Prefix: '{prefix}' → {len(prefix_tokens)} tokens")
-            
-            # Generate story using trigram model
-            # generate_story returns decoded string (special tokens already filtered)
-            story_text = generate_story(
-                prefix_tokens=prefix_tokens,
-                max_len=max_length,
-                unigram_counts=unigrams,
-                bigram_counts=bigrams,
-                trigram_counts=trigrams
-            )
-            
-            # Ensure we have a valid string
-            if story_text is None:
-                story_text = ""
-            else:
-                story_text = str(story_text).strip()
-            
-            print(f"✓ Generated {len(story_text)} characters")
-            
-            # Send success response
-            self.send_response(200)
-            self.send_header('Content-Type', 'application/json')
-            self.send_header('Access-Control-Allow-Origin', '*')
-            self.end_headers()
-            
-            response = json.dumps({
+                return error_response(400, "Invalid JSON in request body")
+        else:
+            data = body
+        
+        # Validate input
+        prefix = data.get('prefix', '').strip()
+        if not prefix:
+            return error_response(400, "Missing or empty 'prefix' field")
+        
+        max_length = data.get('max_length', 500)
+        try:
+            max_length = int(max_length)
+            if max_length < 10 or max_length > 2000:
+                raise ValueError()
+        except ValueError:
+            return error_response(400, "max_length must be an integer between 10 and 2000")
+        
+        # Load models (cached after first request)
+        vocab, merges, unigrams, bigrams, trigrams = load_models()
+        
+        # Encode prefix with BPE tokenizer
+        prefix_tokens = encode(prefix, merges)
+        print(f"📝 Prefix: '{prefix}' → {len(prefix_tokens)} tokens")
+        
+        # Generate story using trigram model
+        story_text = generate_story(
+            prefix_tokens=prefix_tokens,
+            max_len=max_length,
+            unigram_counts=unigrams,
+            bigram_counts=bigrams,
+            trigram_counts=trigrams
+        )
+        
+        # Ensure we have a valid string
+        if story_text is None:
+            story_text = ""
+        else:
+            story_text = str(story_text).strip()
+        
+        print(f"✓ Generated {len(story_text)} characters")
+        
+        # Return success response
+        return {
+            'statusCode': 200,
+            'headers': {
+                'Content-Type': 'application/json',
+                'Access-Control-Allow-Origin': '*'
+            },
+            'body': json.dumps({
                 'story': story_text,
                 'prefix': prefix,
                 'tokens_generated': len(story_text.split())
             }, ensure_ascii=False)
-            
-            self.wfile.write(response.encode('utf-8'))
-            
-        except Exception as e:
-            print(f"❌ Error: {str(e)}")
-            import traceback
-            traceback.print_exc()
-            self.send_error_response(500, f"Internal server error: {str(e)}")
-    
-    def do_OPTIONS(self):
-        """Handle CORS preflight requests"""
-        self.send_response(200)
-        self.send_header('Access-Control-Allow-Origin', '*')
-        self.send_header('Access-Control-Allow-Methods', 'POST, OPTIONS')
-        self.send_header('Access-Control-Allow-Headers', 'Content-Type')
-        self.end_headers()
-    
-    def send_error_response(self, status_code, message):
-        """Send JSON error response"""
-        self.send_response(status_code)
-        self.send_header('Content-Type', 'application/json')
-        self.send_header('Access-Control-Allow-Origin', '*')
-        self.end_headers()
+        }
         
-        error_response = json.dumps({
+    except Exception as e:
+        print(f"❌ Error: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return error_response(500, f"Internal server error: {str(e)}")
+
+
+def error_response(status_code, message):
+    """Helper to create error responses"""
+    return {
+        'statusCode': status_code,
+        'headers': {
+            'Content-Type': 'application/json',
+            'Access-Control-Allow-Origin': '*'
+        },
+        'body': json.dumps({
             'error': message,
             'status': status_code
         })
-        
-        self.wfile.write(error_response.encode('utf-8'))
+    }
