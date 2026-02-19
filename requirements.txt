@@ -1,18 +1,1 @@
-# Python dependencies for Vercel serverless functions
-# These are required for the /api/generate endpoint
-
-# Note: Vercel Python runtime includes some packages by default
-# Only list what's needed for the trigram model and tokenizer
-
-# No additional packages needed!
-# The project uses only Python stdlib:
-# - pickle (stdlib)
-# - json (stdlib) 
-# - random (stdlib)
-# - collections (stdlib)
-# - typing (stdlib)
-
-# If you add external dependencies later, list them here
-# Example:
-# numpy==1.24.0
-# fastapi==0.109.0
+# No external dependencies - using Python standard library only
