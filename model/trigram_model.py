@@ -8,11 +8,15 @@ Trigram Language Model for Urdu Story Generation
 import pickle
 import random
 import sys
+import os
 from collections import defaultdict
 from typing import Dict, List, Tuple
 
-# Import decode function from tokenizer (path added at runtime)
-sys.path.append('../tokenizer')
+# Add parent directory to path for imports
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.append(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'tokenizer'))
+
+from utils.constants import EOS, EOP, EOT, SPECIAL_TOKENS, EOW
 from bpe_tokenizer import decode  # type: ignore
 
 
@@ -163,6 +167,7 @@ def generate_story(
 ) -> str:
     """
     Generate story text using trigram language model with interpolation smoothing.
+    Generation stops when EOT token is produced.
     
     Args:
         prefix_tokens: Initial tokens to start generation (at least 2 tokens)
@@ -173,7 +178,7 @@ def generate_story(
         lambdas: Interpolation weights (λ1, λ2, λ3)
         
     Returns:
-        Generated story as string
+        Generated story as string (special tokens removed)
         
     Example:
         >>> prefix = ['وہ</w>', 'گھر</w>']
@@ -185,7 +190,7 @@ def generate_story(
     # Get all possible next tokens from vocabulary
     vocab = list(unigram_counts.keys())
     
-    # Generate tokens until max_len or <EOT> or <EOS>
+    # Generate tokens until max_len or EOT is reached
     while len(tokens) < max_len:
         # Get last two tokens as context
         if len(tokens) >= 2:
@@ -215,12 +220,30 @@ def generate_story(
         next_token = random.choices(candidates, weights=probs, k=1)[0]
         tokens.append(next_token)
         
-        # Stop if end-of-text or end-of-sentence token
-        if next_token in ['<EOT>', '<EOS>']:
+        # Stop at end-of-text token (required by spec)
+        if next_token == EOT:
             break
+        
+        # Optional: also stop at end-of-sentence if we want shorter outputs
+        # (commented out to allow full story generation)
+        # if next_token == EOS:
+        #     break
     
-    # Decode tokens to text
+    # Ensure story ends properly with EOT
+    # If we stopped due to max_length, add EOT for proper completion
+    if len(tokens) >= max_len and tokens[-1] != EOT:
+        tokens.append(EOT)
+    
+    # Decode tokens to text (special tokens are filtered in decode())
     decoded_text = decode(tokens)
+    
+    # Ensure the decoded text ends with proper Urdu punctuation
+    # This prevents stories from looking incomplete
+    if decoded_text:
+        decoded_text = decoded_text.rstrip()
+        # Check if it ends with Urdu sentence-ending punctuation
+        if not decoded_text.endswith(('۔', '؟', '!')):
+            decoded_text += '۔'  # Add Urdu period
     
     # Extra safety: ensure we return a clean string
     if decoded_text is None:
