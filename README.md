@@ -55,32 +55,42 @@ Default weights in code are $(0.1, 0.3, 0.6)$, favoring trigram context while re
 
 ```text
 Urdu-Children-s-Story-Generation-System/
-├── backend/
-│   ├── api.py                    # FastAPI app and generation endpoint
-│   ├── requirements.txt          # Backend dependencies
-│   ├── Dockerfile                # Containerization for backend
-│   └── DOCKER_README.md
+├── .github/
+│   └── workflows/
+│       └── ci-cd.yml             # GitHub Actions CI/CD pipeline
+├── api/
+│   └── generate.py               # Vercel serverless function for generation
+├── components/
+│   ├── StoryInput.js             # Input UI component
+│   └── StoryOutput.js            # Output UI component
 ├── data/
 │   ├── scrape_stories_selenium.py  # Optional data scraping script
 │   ├── preprocess_stories.py       # Cleaning + normalization + control tokens
 │   └── processed/
 │       └── corpus.txt              # Training corpus used by tokenizer/model
-├── frontend/
-│   ├── pages/index.js            # Main app page
-│   ├── components/               # Input and output UI components
-│   └── package.json
+├── model/
+│   ├── trigram_model.py          # N-gram counting + generation
+│   ├── train_trigram.py          # Model training script
+│   └── trigram_model.pkl         # Serialized model artifact
+├── pages/
+│   ├── _app.js                   # Next.js app wrapper
+│   ├── _document.js              # Custom document
+│   └── index.js                  # Main page
+├── styles/
+│   └── globals.css               # Global styles
+├── tests/
+│   └── test_api_generate.py     # Backend API unit tests
 ├── tokenizer/
 │   ├── bpe_tokenizer.py          # Train/load/encode/decode BPE
 │   ├── train_bpe.py              # Tokenizer training pipeline
 │   ├── merges.txt                # Learned merge rules
 │   └── vocab.json                # Learned vocabulary
-├── model/
-│   ├── trigram_model.py          # N-gram counting + generation
-│   ├── train_trigram.py          # Model training script
-│   └── trigram_model.pkl         # Serialized model artifact
 ├── utils/
 │   └── constants.py              # Shared special tokens and helpers
-└── raw/data/                     # Raw downloaded story files
+├── raw/data/                     # Raw downloaded story files
+├── next.config.js                # Next.js configuration
+├── package.json                  # Node dependencies
+└── tailwind.config.js            # Tailwind CSS configuration
 ```
 
 ---
@@ -116,21 +126,114 @@ These are intentionally selected to avoid collisions with natural Urdu text, and
 - Samples next tokens until `EOT` or maximum length.
 - Decodes token stream back to readable Urdu story text.
 
-### 5) `backend/` (serving)
+### 5) `api/` (serverless backend)
 
-- Loads tokenizer and model once at startup.
-- Exposes generation endpoint via FastAPI.
-- Returns JSON responses suitable for web integration.
+- Vercel serverless function handler for story generation.
+- Loads tokenizer and model on cold start (cached on warm starts).
+- Exposes generation endpoint at `/api/generate`.
+- Returns JSON responses with generated stories.
 
-### 6) `frontend/` (user interface)
+### 6) `pages/` and `components/` (Next.js frontend)
 
 - Next.js app with Urdu RTL input/output behavior.
-- Sends user prefix to backend and renders generated story.
-- Includes loading and basic error handling states.
+- `pages/index.js` contains main application logic.
+- `components/StoryInput.js` handles user input.
+- `components/StoryOutput.js` renders generated stories.
+- Includes loading states and error handling.
+
+### 7) `tests/` (automated testing)
+
+- `test_api_generate.py` contains backend API unit tests.
+- Tests invalid JSON, empty prefix, and successful generation flows.
+- Uses pytest with mocked dependencies for fast execution.
 
 ---
 
-## Quick start (inference only)
+## CI/CD Pipeline
+
+This project uses GitHub Actions for continuous integration and continuous deployment.
+
+### Pipeline jobs
+
+**1. Frontend Build (`frontend-build`)**
+- Installs Node.js dependencies
+- Builds Next.js production bundle
+- Validates build passes without errors
+
+**2. Python Validation (`python-validation`)**
+- Compiles Python syntax across all modules
+- Validates core imports (tokenizer, model, utils)
+- Runs backend API unit tests with pytest
+
+**3. Deploy to Vercel (`deploy-vercel`)**
+- Runs only after CI jobs pass
+- Deploys only on push to `main` branch
+- Requires GitHub secrets for authentication
+- Automatically updates production on Vercel
+
+### Workflow triggers
+
+- **Automatic:** push to `main`, `master`, or `develop` branches
+- **Automatic:** pull requests to these branches
+- **Manual:** workflow dispatch button in Actions tab
+
+### Required GitHub Secrets
+
+For automatic Vercel deployment, add these secrets in repository settings:
+
+- `VERCEL_TOKEN`: Personal access token from Vercel account
+- `VERCEL_ORG_ID`: Your Vercel organization/team ID
+- `VERCEL_PROJECT_ID`: Target project ID
+
+**How to obtain secrets:**
+
+1. **VERCEL_TOKEN:**
+   - Vercel Dashboard → Account Settings → Tokens → Create Token
+
+2. **VERCEL_ORG_ID and VERCEL_PROJECT_ID:**
+   - Run `npx vercel link` in project root
+   - Open `.vercel/project.json`
+   - Copy `orgId` and `projectId` values
+
+3. **Add to GitHub:**
+   - Repository → Settings → Secrets and variables → Actions
+   - New repository secret for each value
+
+### Manual workflow run
+
+To trigger CI/CD manually without pushing code:
+
+1. Go to repository on GitHub → Actions tab
+2. Select "CI/CD Pipeline"
+3. Click "Run workflow"
+4. Choose branch and click "Run workflow" button
+
+---
+
+## Deployment
+
+### Vercel (Production)
+
+This project is configured for Vercel serverless deployment.
+
+**Automatic deployment:**
+- Push to `main` branch triggers automatic deployment via GitHub Actions
+- CI checks must pass before deployment starts
+
+**Manual deployment:**
+```bash
+npm install -g vercel
+vercel --prod
+```
+
+**Environment:**
+- Frontend: Static Next.js pages
+- Backend: Serverless function at `/api/generate`
+- Python runtime: Managed by Vercel with `uv` package manager
+
+---
+
+## Quick start (local development)
 
 Use this path if trained artifacts already exist:
 
@@ -138,35 +241,27 @@ Use this path if trained artifacts already exist:
 - `tokenizer/vocab.json`
 - `model/trigram_model.pkl`
 
-### Backend
+### Install dependencies
 
 ```bash
-cd backend
-pip install -r requirements.txt
-python api.py
+npm install
 ```
 
-Backend URL: `http://localhost:8000`
-
-### Frontend
+### Run development server
 
 ```bash
-cd frontend
-npm install
 npm run dev
 ```
 
-Frontend URL: `http://localhost:3000`
+Application URL: `http://localhost:3000`
+
+The serverless function will be available at `http://localhost:3000/api/generate`
 
 ---
 
 ## API contract
 
-### `GET /`
-
-Health/status endpoint. Returns service and model metadata.
-
-### `POST /generate`
+### `POST /api/generate`
 
 Request:
 
@@ -186,14 +281,33 @@ Response:
 
 ```json
 {
-  "story": "...generated urdu story..."
+  "story": "...generated urdu story...",
+  "prefix": "ایک دن",
+  "tokens_generated": 42
 }
 ```
 
-Example request:
+Error response:
+
+```json
+{
+  "error": "Missing or empty 'prefix' field",
+  "status": 400
+}
+```
+
+Example request (local dev):
 
 ```bash
-curl -X POST "http://localhost:8000/generate" \
+curl -X POST "http://localhost:3000/api/generate" \
+  -H "Content-Type: application/json" \
+  -d '{"prefix":"ایک دن","max_length":50}'
+```
+
+Example request (production):
+
+```bash
+curl -X POST "https://your-app.vercel.app/api/generate" \
   -H "Content-Type: application/json" \
   -d '{"prefix":"ایک دن","max_length":50}'
 ```
@@ -235,34 +349,45 @@ cd model
 python train_trigram.py
 ```
 
-### Step 5: Start backend and frontend
+### Step 5: Start development server
 
 Run the quick start commands above.
 
 ---
 
-## Docker (backend service)
+## Running tests
 
-From repository root:
+### Backend API tests
 
 ```bash
-docker build -f backend/Dockerfile -t urdu-story-api .
-docker run -p 8000:8000 urdu-story-api
+pip install pytest
+python -m pytest tests/test_api_generate.py -v
 ```
 
-Available URLs:
+### Run all tests (as in CI)
 
-- API: `http://localhost:8000`
-- Docs: `http://localhost:8000/docs`
+```bash
+# Python syntax validation
+python -m compileall api model tokenizer utils data
+
+# Import checks
+python -c "from tokenizer.bpe_tokenizer import load_tokenizer, encode"
+python -c "from model.trigram_model import load_model, generate_story"
+python -c "from utils.constants import EOS, EOP, EOT, SPECIAL_TOKENS"
+
+# Backend unit tests
+python -m pytest -q tests/test_api_generate.py
+```
 
 ---
 
 ## Operational notes
 
-- The frontend currently calls backend at `http://localhost:8000` directly.
+- The frontend calls the serverless API at `/api/generate`.
 - Generation is stochastic; same prompt can produce different outputs.
 - Quality depends strongly on corpus quality and domain coverage.
 - This classical LM is lightweight and interpretable, but less fluent than modern large transformer models.
+- Model artifacts are loaded on serverless function cold start and cached across warm invocations.
 
 ---
 
@@ -270,14 +395,31 @@ Available URLs:
 
 ### Frontend cannot generate stories
 
-- Confirm backend is running on port `8000`.
+- Confirm development server is running on port `3000`.
 - Check browser console/network for request failures.
-- Verify CORS settings in backend for local frontend origin.
+- Verify model artifacts exist in correct paths.
+- Check serverless function logs in terminal or Vercel dashboard.
 
-### Backend startup fails
+### Serverless function errors
 
 - Ensure model/tokenizer artifacts exist and paths are correct.
-- Start from expected directories (`backend`, `model`, `tokenizer`) when running scripts.
+- Verify Python imports resolve properly.
+- Check that all special tokens are defined in `utils/constants.py`.
+- Review function logs for detailed error messages.
+
+### CI/CD pipeline failing
+
+- **Frontend build fails:** Check `package.json` dependencies and Next.js configuration.
+- **Python validation fails:** Verify syntax and imports in affected modules.
+- **Backend tests fail:** Run `python -m pytest tests/` locally to debug.
+- **Vercel deploy fails:** Ensure GitHub secrets are set correctly and `uv` is available.
+
+### Vercel deployment issues
+
+- Verify all three secrets are configured in GitHub repository settings.
+- Check Vercel project is linked correctly with `npx vercel link`.
+- Ensure Python runtime version matches CI configuration (3.11).
+- Review Vercel deployment logs for detailed error messages.
 
 ### Scraper errors
 
